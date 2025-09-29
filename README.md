@@ -3,10 +3,10 @@ Braindead, is a compiler made for running Brainfuck codes. Written in C and made
 
 ## Supported In
 
-| Linux Distros | Status  | Comment |
-| ------------- | ------- | N/A     |
-| Arch Linux    | ✅      | N/A     |
-| Other         | ✅      | N/A     |
+| Linux Distros | Status   | Comment |
+|---------------|----------|---------|
+| Arch Linux    | ✅       | N/A     |
+| Other         | ✅       | N/A     |
 
 ## Download
 You can directly download "braindead" from Github Releases page.
