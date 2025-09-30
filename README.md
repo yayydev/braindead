@@ -33,3 +33,6 @@ Check commands by running "braindead -h".
 
 ## Errors:
 `-bash: line 44: ./clang-braindead.out: Permission denied`: Simple to fix, run: `chmod 777 clang-braindead.out`.
+
+## How Brainfuck Works?
+Brainfuck code is first **transpiled into C code**. This C code is temporarily stored and then compiled using an existing **host compiler** like GCC or Clang to produce a native executable. (Logs also stored in /tmp/)
