@@ -1,9 +1,9 @@
-#ifndef BRAINDHEAD_H
-#define BRAINDHEAD_H
+#ifndef BRAINDEAD_H
+#define BRAINDEAD_H
 
 #include <stddef.h>
 
-#define VERSION "0.0.1-beta"
+#define VERSION "0.0.2-beta"
 
 extern int dev_mode;
 
@@ -24,6 +24,7 @@ void mkdir_p(const char *path);
 char *make_c_from_bf(const char *code, size_t len, const char *srcname);
 
 int run_command(const char *cmd);
+int rbws(const char *binary, int argc, char **argv);
 char *find_compiler(void);
 
 int rand_range(int a, int b);
