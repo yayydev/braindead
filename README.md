@@ -32,4 +32,4 @@ You can directly download "braindead" from Github Releases page.
 Check commands by running "braindead -h".
 
 ## Errors:
-"-bash: line 44: ./clang-braindead.out: Permission denied": Simple to fix, run: "chmod 777 clang-braindead.out".
+`-bash: line 44: ./clang-braindead.out: Permission denied`: Simple to fix, run: `chmod 777 clang-braindead.out`.
