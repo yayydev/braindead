@@ -7,8 +7,10 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/wait.h>
 
-#define VERSION "0.0.1-beta"
+#define VERSION "0.0.2-beta"
 
 static int dev_mode = 0;
 
@@ -51,7 +53,11 @@ static char *read_file(const char *path, size_t *len){
     return b;
 }
 
-static int is_bf_char(char c){return c=='>'||c=='<'||c=='+'||c=='-'||c=='.'||c==','||c=='['||c==']'||c=='\n'||c=='\r'||c=='\t'||c==' ';}
+static int is_bf_char(char c){
+    return c=='>'||c=='<'||c=='+'||c=='-'||c=='.'||c==','||
+           c=='['||c==']'||c=='#'||c=='!'||c=='*'||c==':'||c==';'||
+           c=='\n'||c=='\r'||c=='\t'||c==' ';
+}
 
 static void mkdir_p(const char *path){
     struct stat st;
@@ -70,8 +76,8 @@ static void emit_error_variation(const char *filename,int line,int col,const cha
     };
     const char *msgs[] = {
         "Error:  \"%s\" is not defined, you can check the documentation for help.\n",
-        "Fatal: unknown symbol \"%s\" encountered.\n",
-        "Compilation failed: token \"%s\" unrecognized.\n",
+        "Fatal: Unknown symbol \"%s\" encountered.\n",
+        "Compilation failed: Token \"%s\" unrecognized.\n",
         "Parse error: '%s' — refer to docs.\n"
     };
     const char *docs[] = {
@@ -143,7 +149,7 @@ static char *sanitize_filename(const char *in){
 }
 
 static char *make_c_from_bf(const char *code,size_t len,const char *srcname){
-    size_t cap = len*12 + 4096;
+    size_t cap = len*16 + 4096;
     char *out = malloc(cap);
     if(!out) exit(1);
     out[0]=0;
@@ -165,6 +171,12 @@ static char *make_c_from_bf(const char *code,size_t len,const char *srcname){
         else if(c==','){ strcat(out,"int _in = getchar(); if(_in==EOF) *p = 0; else *p = _in;\n"); }
         else if(c=='['){ strcat(out,"while(*p){\n"); }
         else if(c==']'){ strcat(out,"}\n"); }
+        else if(c=='#'){ strcat(out,"fprintf(stderr,\"[DEBUG] ptr=%ld val=%d\\n\", (long)(p-t), *p);\n"); }
+        else if(c=='!'){ strcat(out,"free(t); return 0;\n"); }
+        else if(c=='*'){ strcat(out,"p = t;\n"); }
+        else if(c==':'||c==';'){
+            while(i<len && code[i]!='\n'){ i++; }
+        }
         i++;
     }
     strcat(out,"free(t); return 0; }\n");
@@ -184,6 +196,34 @@ static int run_command(const char *cmd){
     int rc = system(cmd);
     if(rc==-1) return -1;
     return WEXITSTATUS(rc);
+}
+
+static int rbws(const char *binary, int argc, char **argv) {
+    if(argc <= 2) return run_command(binary);
+
+    int pipefd[2];
+    if(pipe(pipefd) == -1) { perror("pipe"); return 1; }
+
+    pid_t pid = fork();
+    if(pid == -1) { perror("fork"); return 1; }
+
+    if(pid == 0) {
+        close(pipefd[1]);
+        dup2(pipefd[0], STDIN_FILENO);
+        close(pipefd[0]);
+        execl(binary, binary, NULL);
+        perror("execl"); exit(1);
+    } else {
+        close(pipefd[0]);
+        for(int i=2;i<argc;i++){
+            write(pipefd[1], argv[i], strlen(argv[i]));
+            write(pipefd[1], " ", 1);
+        }
+        close(pipefd[1]);
+        int status;
+        waitpid(pid, &status, 0);
+        return WEXITSTATUS(status);
+    }
 }
 
 int main(int argc,char **argv){
@@ -216,25 +256,27 @@ int main(int argc,char **argv){
     char tmpc[1024]; snprintf(tmpc,sizeof(tmpc),"/tmp/braindead_%d_%s.c",getpid(),safe);
     char tmpexe[1024]; snprintf(tmpexe,sizeof(tmpexe),"/tmp/braindead_exec_%d_%s",getpid(),safe);
     write_file(tmpc,csrc);
-    char cmd[4096];
-    snprintf(cmd,sizeof(cmd),"clang -O2 \"%s\" -o \"%s\" 2> /tmp/braindead_clang_err_%d.txt",tmpc,tmpexe,getpid());
+
+    char cmd[4092];
+    snprintf(cmd,sizeof(cmd),"%s -O2 \"%s\" -o \"%s\" 2> /tmp/braindead_compile_err_%d.txt",find_compiler(),tmpc,tmpexe,getpid());
     int rc = run_command(cmd);
     if(rc!=0){
-        fprintf(stderr,"Failed to compile temporary JIT binary (clang rc=%d). See /tmp/braindead_clang_err_%d.txt\n",rc,getpid());
+        fprintf(stderr,"Failed to compile temporary JIT binary (rc=%d). See /tmp/braindead_compile_err_%d.txt\n",rc,getpid());
         free(csrc); free(code); free(safe);
         return 1;
     }
-    int runrc = run_command(tmpexe);
+
+    int runrc = rbws(tmpexe, argc, argv+2);
     if(runrc!=0){
         fprintf(stderr,"Program exited with code %d\n",runrc);
     }
     printf("Done!\n");
     char outname[1024];
     snprintf(outname,sizeof(outname),"%s.out",safe);
-    snprintf(cmd,sizeof(cmd),"clang -O2 \"%s\" -o \"%s\" 2> /tmp/braindead_clang_final_%d.txt",tmpc,outname,getpid());
+    snprintf(cmd,sizeof(cmd),"%s -O2 \"%s\" -o \"%s\" 2> /tmp/braindead_final_err_%d.txt",find_compiler(),tmpc,outname,getpid());
     int rc2 = run_command(cmd);
     if(rc2!=0){
-        fprintf(stderr,"Failed to create final binary (clang rc=%d). See /tmp/braindead_clang_final_%d.txt\n",rc2,getpid());
+        fprintf(stderr,"Failed to create final binary (rc=%d). See /tmp/braindead_final_err_%d.txt\n",rc2,getpid());
         free(csrc); free(code); free(safe);
         return 1;
     }
